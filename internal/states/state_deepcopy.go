@@ -37,10 +37,15 @@ func (s *State) DeepCopy() *State {
 	for k, v := range s.RootOutputValues {
 		outputValues[k] = v.DeepCopy()
 	}
+	ephemeralApplied := make(map[string]struct{}, len(s.EphemeralApplied))
+	for k := range s.EphemeralApplied {
+		ephemeralApplied[k] = struct{}{}
+	}
 	return &State{
 		Modules:          modules,
 		RootOutputValues: outputValues,
 		CheckResults:     s.CheckResults.DeepCopy(),
+		EphemeralApplied: ephemeralApplied,
 	}
 }
 

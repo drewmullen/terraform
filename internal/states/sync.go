@@ -539,6 +539,21 @@ func (s *SyncState) MaybeMoveModuleInstance(src, dst addrs.ModuleInstance) bool 
 	return s.state.MaybeMoveModuleInstance(src, dst)
 }
 
+// SetEphemeralApplied records that the given ephemeral resource instance was
+// successfully opened during an apply with open_once = true.
+func (s *SyncState) SetEphemeralApplied(addr addrs.AbsResourceInstance) {
+	defer s.beginWrite()()
+	s.state.SetEphemeralApplied(addr)
+}
+
+// IsEphemeralApplied returns true if the given ephemeral resource instance was
+// previously opened with open_once = true and should not be opened again.
+func (s *SyncState) IsEphemeralApplied(addr addrs.AbsResourceInstance) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.state.IsEphemeralApplied(addr)
+}
+
 func (s *SyncState) beginWrite() func() {
 	s.lock.Lock()
 	if !s.writable {

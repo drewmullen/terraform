@@ -302,6 +302,13 @@ func prepareStateV4(sV4 *stateV4) (*File, tfdiags.Diagnostics) {
 		diags = diags.Append(moreDiags)
 	}
 
+	if len(sV4.EphemeralApplied) > 0 {
+		state.EphemeralApplied = make(map[string]struct{}, len(sV4.EphemeralApplied))
+		for _, addrStr := range sV4.EphemeralApplied {
+			state.EphemeralApplied[addrStr] = struct{}{}
+		}
+	}
+
 	file.State = state
 	return file, diags
 }
@@ -413,6 +420,11 @@ func writeStateV4(file *File, w io.Writer) tfdiags.Diagnostics {
 	}
 
 	sV4.CheckResults = encodeCheckResultsV4(file.State.CheckResults)
+
+	for addrStr := range file.State.EphemeralApplied {
+		sV4.EphemeralApplied = append(sV4.EphemeralApplied, addrStr)
+	}
+	sort.Strings(sV4.EphemeralApplied)
 
 	sV4.normalize()
 
@@ -671,6 +683,7 @@ type stateV4 struct {
 	RootOutputs      map[string]outputStateV4 `json:"outputs"`
 	Resources        []resourceStateV4        `json:"resources"`
 	CheckResults     []checkResultsV4         `json:"check_results"`
+	EphemeralApplied []string                 `json:"ephemeral_applied,omitempty"`
 }
 
 // normalize makes some in-place changes to normalize the way items are

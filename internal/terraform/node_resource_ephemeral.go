@@ -24,6 +24,7 @@ type ephemeralResourceInput struct {
 	addr           addrs.AbsResourceInstance
 	config         *configs.Resource
 	providerConfig addrs.AbsProviderConfig
+	walkOp         walkOperation
 }
 
 // ephemeralResourceOpen implements the "open" step of the ephemeral resource
@@ -113,6 +114,20 @@ func ephemeralResourceOpen(ctx EvalContext, inp ephemeralResourceInput) (*provid
 		return nil, diags
 	}
 
+	// open_once: if this instance was successfully opened in a previous apply,
+	// skip re-opening and register a null value so downstream write-only
+	// consumers receive null (treated as "unchanged" by providers).
+	// On destroy walks we always open so that close() can clean up.
+	if config.OpenOnce && inp.walkOp != walkDestroy && ctx.State().IsEphemeralApplied(inp.addr) {
+		log.Printf("[DEBUG] ephemeralResourceOpen: skipping open for open_once resource %s (already applied)", inp.addr)
+		nullVal := cty.NullVal(schema.Body.ImpliedType()).Mark(marks.Ephemeral)
+		ephemerals.RegisterInstance(ctx.StopCtx(), inp.addr, ephemeral.ResourceInstanceRegistration{
+			Value:      nullVal,
+			ConfigBody: config.Config,
+		})
+		return nil, diags
+	}
+
 	validateResp := provider.ValidateEphemeralResourceConfig(providers.ValidateEphemeralResourceConfigRequest{
 		TypeName: inp.addr.Resource.Resource.Type,
 		Config:   unmarkedConfigVal,
@@ -173,10 +188,24 @@ func ephemeralResourceOpen(ctx EvalContext, inp ephemeralResourceInput) (*provid
 		internal:    resp.Private,
 	}
 
+	// open_once: record that this instance has been applied and skip close so
+	// the external resource outlives this apply. Impl is nil intentionally —
+	// the existing nil-check in resourceInstanceInternal.close() skips the
+	// provider Close call when no implementation is registered.
+	// Only mark as applied during the apply walk; the plan walk must not
+	// poison state so that the apply walk still opens the resource.
+	var regImpl ephemeral.ResourceInstance = impl
+	if config.OpenOnce {
+		if inp.walkOp == walkApply {
+			ctx.State().SetEphemeralApplied(inp.addr)
+		}
+		regImpl = nil
+	}
+
 	ephemerals.RegisterInstance(ctx.StopCtx(), inp.addr, ephemeral.ResourceInstanceRegistration{
 		Value:      resultVal,
 		ConfigBody: config.Config,
-		Impl:       impl,
+		Impl:       regImpl,
 		RenewAt:    resp.RenewAt,
 		Private:    resp.Private,
 	})

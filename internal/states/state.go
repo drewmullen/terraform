@@ -49,6 +49,31 @@ type State struct {
 	// created by a version of Terraform that didn't yet support checks
 	// then this field will be nil.
 	CheckResults *CheckResults
+
+	// EphemeralApplied tracks ephemeral resource instances that have been
+	// successfully opened with open_once = true. These instances will not
+	// be opened again on subsequent applies. Keys are AbsResourceInstance
+	// string representations.
+	EphemeralApplied map[string]struct{}
+}
+
+// SetEphemeralApplied records that the given ephemeral resource instance was
+// successfully opened during an apply with open_once = true.
+func (s *State) SetEphemeralApplied(addr addrs.AbsResourceInstance) {
+	if s.EphemeralApplied == nil {
+		s.EphemeralApplied = make(map[string]struct{})
+	}
+	s.EphemeralApplied[addr.String()] = struct{}{}
+}
+
+// IsEphemeralApplied returns true if the given ephemeral resource instance was
+// previously opened with open_once = true and should not be opened again.
+func (s *State) IsEphemeralApplied(addr addrs.AbsResourceInstance) bool {
+	if s == nil || s.EphemeralApplied == nil {
+		return false
+	}
+	_, ok := s.EphemeralApplied[addr.String()]
+	return ok
 }
 
 // NewState constructs a minimal empty state, containing an empty root module.
