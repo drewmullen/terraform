@@ -80,7 +80,7 @@ func (n *NodePlannableResourceInstance) Execute(ctx EvalContext, op walkOperatio
 	case addrs.DataResourceMode:
 		return n.dataResourceExecute(ctx)
 	case addrs.EphemeralResourceMode:
-		return n.ephemeralResourceExecute(ctx)
+		return n.ephemeralResourceExecute(ctx, op)
 	case addrs.ListResourceMode:
 		return n.listResourceExecute(ctx)
 	default:
@@ -159,7 +159,7 @@ func (n *NodePlannableResourceInstance) dataResourceExecute(ctx EvalContext) (di
 	return diags
 }
 
-func (n *NodePlannableResourceInstance) ephemeralResourceExecute(ctx EvalContext) (diags tfdiags.Diagnostics) {
+func (n *NodePlannableResourceInstance) ephemeralResourceExecute(ctx EvalContext, op walkOperation) (diags tfdiags.Diagnostics) {
 	deferrals := ctx.Deferrals()
 	// For deferred ephemeral resources, we don't need to do anything here.
 	if deferrals.ShouldDeferResourceInstanceChanges(n.Addr, n.Dependencies) {
@@ -171,6 +171,7 @@ func (n *NodePlannableResourceInstance) ephemeralResourceExecute(ctx EvalContext
 		addr:           n.Addr,
 		config:         n.Config,
 		providerConfig: n.ResolvedProvider,
+		walkOp:         op,
 	})
 
 	if deferred != nil {

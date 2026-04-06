@@ -50,6 +50,11 @@ type Resource struct {
 	// If this is nil, then this resource is essentially public.
 	Container Container
 
+	// OpenOnce is set for ephemeral resources with lifecycle { open_once = true }.
+	// When true, Terraform opens the resource only on the first apply and skips
+	// subsequent opens, recording a minimal entry in state to track this.
+	OpenOnce bool
+
 	DeclRange hcl.Range
 	TypeRange hcl.Range
 }
@@ -479,19 +484,12 @@ func decodeEphemeralBlock(block *hcl.Block, override bool) (*Resource, hcl.Diagn
 			}
 			seenLifecycle = block
 
-			lcContent, lcDiags := block.Body.Content(resourceLifecycleBlockSchema)
+			lcContent, lcDiags := block.Body.Content(ephemeralLifecycleBlockSchema)
 			diags = append(diags, lcDiags...)
 
-			// All of the attributes defined for resource lifecycle are for
-			// managed resources only, so we can emit a common error message
-			// for any given attributes that HCL accepted.
-			for name, attr := range lcContent.Attributes {
-				diags = append(diags, &hcl.Diagnostic{
-					Severity: hcl.DiagError,
-					Summary:  "Invalid ephemeral resource lifecycle argument",
-					Detail:   fmt.Sprintf("The lifecycle argument %q is defined only for managed resources (\"resource\" blocks), and is not valid for ephemeral resources.", name),
-					Subject:  attr.NameRange.Ptr(),
-				})
+			if attr, exists := lcContent.Attributes["open_once"]; exists {
+				valDiags := gohcl.DecodeExpression(attr.Expr, nil, &r.OpenOnce)
+				diags = append(diags, valDiags...)
 			}
 
 			for _, block := range lcContent.Blocks {
@@ -962,6 +960,16 @@ var ephemeralBlockSchema = &hcl.BodySchema{
 		{Type: "lifecycle"},
 		{Type: "locals"}, // reserved for future use
 		{Type: "_"},      // meta-argument escaping block
+	},
+}
+
+var ephemeralLifecycleBlockSchema = &hcl.BodySchema{
+	Attributes: []hcl.AttributeSchema{
+		{Name: "open_once"},
+	},
+	Blocks: []hcl.BlockHeaderSchema{
+		{Type: "precondition"},
+		{Type: "postcondition"},
 	},
 }
 
